@@ -1,0 +1,138 @@
+<script module lang="ts">
+    import { getContext, onMount, tick } from "svelte"
+
+    const APP = Symbol()
+    export class App {
+        navigationHeight = $state(0)
+        router = $state<Router>()
+        isAuth = $state(false)
+        api: Api
+
+        themeColor = $state<string>()
+        sidebarOpen = $state(false)
+        openSidebar() {
+            this.sidebarOpen = true
+        }
+        closeSidebar() {
+            this.sidebarOpen = false
+        }
+        updateThemeColor(..._: unknown[]) {
+            tick().then(() => {
+                const pages = document.querySelectorAll(".page")
+                const page = pages[pages.length - 1]
+                const header = page?.querySelector("header.header")
+                if (!header) return
+                const background =
+                    getComputedStyle(header).getPropertyValue(
+                        "background-color",
+                    )
+                this.themeColor = background
+            })
+
+            return () => this.updateThemeColor()
+        }
+        constructor() {
+            this.api = new Api(this)
+        }
+        logout() {
+            this.api.logout()
+            this.router?.navigate(routes.login, { mode: "replace" })
+            this.isAuth = false
+        }
+    }
+    export const useApp = () => getContext<App>(APP)
+</script>
+
+<script lang="ts">
+    import { Api, setApi } from "$api"
+    import colorScheme from "$lib/color-scheme"
+    import { _, i18n } from "$lib/i18n"
+    import Wrapper, { type Router } from "$lib/router"
+    import { setContext } from "svelte"
+    import { routes } from "./pages"
+    import Faq from "./pages/faq/index.svelte"
+    import Attestation from "./pages/attestation.svelte"
+    import FaqItem from "./pages/faq/item.svelte"
+    import Login from "./pages/login.svelte"
+    import Privacy from "./pages/privacy.svelte"
+    import Schedule from "./pages/schedule.svelte"
+    import Settings from "./pages/settings.svelte"
+    import { Toaster } from "$lib/components/ui/sonner"
+    import Profile from "./pages/profile.svelte"
+    import Sidebar from "$lib/components/sidebar.svelte"
+    import Calculator from "./pages/calculator.svelte"
+    import Exams from "./pages/exams.svelte"
+    import Files from "./pages/files/index.svelte"
+    import FilesItem from "./pages/files/item.svelte"
+    import Menu from "./pages/menu.svelte"
+    import OfflineIndicator from "$lib/components/offline-indicator.svelte"
+
+    const app = new App()
+    const isAuth = (router: Router, navigate = false) => {
+        const auth = app.api.checkAuth()
+        if (!auth) {
+            router.navigate(routes.login, { mode: "replace" })
+            return auth
+        }
+        if (navigate) {
+            router.navigate(routes.home, { mode: "replace" })
+        }
+        return auth
+    }
+    onMount(() => {
+        app.isAuth = app.api.checkAuth()
+    })
+    setContext(APP, app)
+    setApi(app.api)
+
+    $effect(() => app.updateThemeColor(colorScheme.scheme))
+</script>
+
+<svelte:body use:colorScheme.apply use:i18n.apply />
+<svelte:head>
+    {#if app.themeColor}
+        <meta name="msapplication-TileColor" content={app.themeColor} />
+        <meta name="theme-color" content={app.themeColor} />
+    {/if}
+</svelte:head>
+<Toaster />
+<OfflineIndicator />
+
+<Wrapper home={routes.home}>
+    {#snippet navigation()}
+        {#if app.isAuth}
+            <Sidebar />
+        {/if}
+    {/snippet}
+    {#snippet children(router)}
+        {@const faqParams = router.pattern(routes.faqItem)}
+        {@const filesParams = router.pattern(routes.filesItem)}
+        {#if router.pattern(routes.login) && !isAuth(router, true)}
+            <Login />
+        {:else if router.pattern(routes.settings)}
+            <Settings />
+        {:else if router.pattern(routes.privacy)}
+            <Privacy />
+        {:else if router.pattern(routes.schedule) && isAuth(router)}
+            <Schedule />
+        {:else if router.pattern(routes.profile) && isAuth(router)}
+            <Profile />
+        {:else if router.pattern(routes.attestation) && isAuth(router)}
+            <Attestation />
+        {:else if router.pattern(routes.calculator) && isAuth(router)}
+            <Calculator />
+        {:else if router.pattern(routes.files) && isAuth(router)}
+            <Files />
+        {:else if filesParams && isAuth(router)}
+            <FilesItem id={filesParams.id} />
+        {:else if router.pattern(routes.faq)}
+            <Faq />
+        {:else if router.pattern(routes.exams)}
+            <Exams />
+        {:else if router.pattern(routes.menu)}
+            <Menu />
+        {:else if faqParams}
+            <FaqItem id={faqParams.id} />
+        {/if}
+    {/snippet}
+</Wrapper>
